@@ -1,10 +1,10 @@
-﻿let txt = @"Visual F#
+﻿let txt = """Visual F#
 =========
 F# is a **programming language** that supports _functional_, as well as _object-oriented_ and _imperative_ programming styles. Hello world can be written as follows:
 
-    `printfn ""Hello world!""` 
+    `printfn "Hello world!"` 
 
-For more information, see the [F# home page] (http://fsharp.net) or  read [Real-World Func tional Programming](http://manning.com/petricek)  published by [Manning](http://manning.com)."
+For more information, see the [F# home page] (http://fsharp.net) or  read [Real-World Func tional Programming](http://manning.com/petricek)  published by [Manning](http://manning.com)."""
 
 type MarkdownDocument = list<MarkdownBlock>
 and MarkdownBlock =
@@ -136,3 +136,96 @@ let rec parseSpans acc chars = seq {
 
 // Exercise 2: Add support for hard line breaks
 "hello \n\rworld \r!!!" |> List.ofSeq |> parseSpans [] |> Array.ofSeq
+
+
+module List = 
+    let partitionWhile f = 
+        let rec loop acc = function
+            | x::xs when f x -> loop (x::acc) xs
+            | xs -> List.rev acc, xs
+        loop []
+
+let (|PrefixedLines|) (prefix:string) (lines:list<string>) =
+    let prefixed, other =
+        lines |> List.partitionWhile (fun (line:string) -> line.StartsWith(prefix))
+    [ for (line:string) in prefixed ->
+        line.Substring(prefix.Length) ], other
+
+let (|LineSeparated|) lines =
+    let isWhite = System.String.IsNullOrWhiteSpace
+    match List.partitionWhile (isWhite >> not) lines with
+    | par, _::rest
+    | par, ([] as rest) -> par, rest
+
+let (|AsCharList|) (str:string) =
+    List.ofSeq str
+
+
+let (PrefixedLines "..." res) = ["...1";"...2";"3"]
+let (PrefixedLines "..." res) = ["1";"...2";"...3"]
+let (PrefixedLines "..." res) = ["...1";"2";"...3"]
+
+
+// Exercise 3 : Improve and complete parsing of headings
+let (|Heading|_|) = function
+    | AsCharList(StartsWith ['#'; ' '] heading)::lines -> Some(1,heading,lines) 
+    | AsCharList(StartsWith ['#'; '#'; ' '] heading)::lines -> Some(2,heading,lines) 
+    | _ -> None
+
+let (|Heading2|_|) lines = 
+    match List.partitionWhile (fun (line:string) -> line.StartsWith("===") |> not) (lines:list<string>) with
+    | heading::_, _::rest
+    | heading::_, ([] as rest) -> Some(2, heading |> List.ofSeq, rest)
+    | _ -> None
+
+let heading::_, _::rest = 
+    "AAA\r\n=====\r\nABC".Split('\r','\n') |> List.ofSeq |> List.partitionWhile (fun (line:string) -> line.StartsWith("===") |> not)
+let (Heading2 ret) = "AAA\r\n=====\r\nABC".Split('\r','\n') |> List.ofSeq
+
+let rec parseBlocks lines = seq {
+    match lines with
+    // Exercise 3 : Improve and complete parsing of headings
+    | Heading(size, heading, lines) ->
+        yield Heading(size, parseSpans [] heading |> List.ofSeq)
+        yield! parseBlocks lines
+//    | AsCharList(StartsWith ['#'; ' '] heading)::lines ->
+//        yield Heading(1, parseSpans [] heading |> List.ofSeq)
+//        yield! parseBlocks lines
+//    | AsCharList(StartsWith ['#'; '#'; ' '] heading)::lines ->
+//        yield Heading(2, parseSpans [] heading |> List.ofSeq)
+//        yield! parseBlocks lines
+    | PrefixedLines "    " (body, lines) when body <> [] ->
+        yield CodeBlock(body)
+        yield! parseBlocks lines
+    | LineSeparated (body, lines) when body <> [] ->
+        let body = String.concat " " body |> List.ofSeq
+        yield Paragraph(parseSpans [] body |> List.ofSeq)
+        yield! parseBlocks lines
+    | line::lines when System.String.IsNullOrWhiteSpace(line) ->
+        yield! parseBlocks lines    
+//    | Heading2(size, heading, lines) ->
+//        yield Heading(size, parseSpans [] heading |> List.ofSeq)
+//        yield! parseBlocks lines
+    | _ -> ()
+}
+
+
+let sample = """# Introducing F#
+F# is a _functional-first_ language,
+which looks like this:
+
+    let msg = "world"
+    printfn "hello %s!" msg
+
+This sample **prints** `hello world!`
+
+## h2 heading
+
+h1 heading
+==========
+"""
+
+let sampleDoc = 
+    sample.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
+
+// Exercise 3 : Improve and complete parsing of headings
