@@ -170,21 +170,12 @@ let (PrefixedLines "..." res) = ["...1";"2";"...3"]
 let (|Heading|_|) = function
     | AsCharList(StartsWith ['#'; ' '] heading)::lines -> Some(1,heading,lines) 
     | AsCharList(StartsWith ['#'; '#'; ' '] heading)::lines -> Some(2,heading,lines) 
+    | heading::AsCharList(StartsWith ['-'; '-'; '-'] _)::lines -> Some(1,heading |> List.ofSeq,lines) 
+    | heading::AsCharList(StartsWith ['='; '='; '='] _)::lines -> Some(2,heading |> List.ofSeq,lines) 
     | _ -> None
-
-let (|Heading2|_|) lines = 
-    match List.partitionWhile (fun (line:string) -> line.StartsWith("===") |> not) (lines:list<string>) with
-    | heading::_, _::rest
-    | heading::_, ([] as rest) -> Some(2, heading |> List.ofSeq, rest)
-    | _ -> None
-
-let heading::_, _::rest = 
-    "AAA\r\n=====\r\nABC".Split('\r','\n') |> List.ofSeq |> List.partitionWhile (fun (line:string) -> line.StartsWith("===") |> not)
-let (Heading2 ret) = "AAA\r\n=====\r\nABC".Split('\r','\n') |> List.ofSeq
 
 let rec parseBlocks lines = seq {
     match lines with
-    // Exercise 3 : Improve and complete parsing of headings
     | Heading(size, heading, lines) ->
         yield Heading(size, parseSpans [] heading |> List.ofSeq)
         yield! parseBlocks lines
@@ -203,12 +194,8 @@ let rec parseBlocks lines = seq {
         yield! parseBlocks lines
     | line::lines when System.String.IsNullOrWhiteSpace(line) ->
         yield! parseBlocks lines    
-//    | Heading2(size, heading, lines) ->
-//        yield Heading(size, parseSpans [] heading |> List.ofSeq)
-//        yield! parseBlocks lines
     | _ -> ()
 }
-
 
 let sample = """# Introducing F#
 F# is a _functional-first_ language,
@@ -223,9 +210,9 @@ This sample **prints** `hello world!`
 
 h1 heading
 ==========
+h2 heading
+----------
+No heading
 """
 
-let sampleDoc = 
-    sample.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
-
-// Exercise 3 : Improve and complete parsing of headings
+let sampleDoc = sample.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
