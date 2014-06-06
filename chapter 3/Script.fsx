@@ -10,7 +10,9 @@ type MarkdownDocument = list<MarkdownBlock>
 and MarkdownBlock =
 | Heading of int * MarkdownSpans   
 | Paragraph of MarkdownSpans   
-| CodeBlock of list<string>  
+| CodeBlock of list<string>
+| BlockQuote of list<MarkdownBlock>
+
 and MarkdownSpans = list<MarkdownSpan>
 and MarkdownSpan =
 | Literal of string   
@@ -32,9 +34,6 @@ let parseInline = function
         parseInlineBody [] chars   
     | _ -> None   
 
-"`code` and" |> List.ofSeq |> parseInline
-
-
 let toString chars = 
     System.String(chars |> Array.ofList)  
 //
@@ -53,10 +52,6 @@ let toString chars =
 //    | _, [] ->
 //        yield! emitLiteral     
 //    }
-
-
-
-
 
 let (|StartsWith|_|) prefix input =
     let rec loop = function
@@ -187,11 +182,23 @@ let rec parseBlocks lines = seq {
 //        yield! parseBlocks lines
     | PrefixedLines "    " (body, lines) when body <> [] ->
         yield CodeBlock(body)
+        yield! parseBlocks lines  
+    // Exercise 4: Add support for block quotes
+    | LineSeparated (body, lines) when body <> [] 
+            && body.Head.StartsWith(">") 
+            && (body |> List.filter(fun s -> s.StartsWith(">")) |> List.length) = 1 ->
+        let head::rest = body
+        let body = head.Substring(1)::rest
+        yield BlockQuote(parseBlocks body |> List.ofSeq)
+        yield! parseBlocks lines
+    | PrefixedLines ">" (body, lines) when body <> [] ->        
+        let body = body |> List.map (fun s -> s.Substring(1))
+        yield BlockQuote(parseBlocks body |> List.ofSeq)
         yield! parseBlocks lines
     | LineSeparated (body, lines) when body <> [] ->
         let body = String.concat " " body |> List.ofSeq
         yield Paragraph(parseSpans [] body |> List.ofSeq)
-        yield! parseBlocks lines
+        yield! parseBlocks lines               
     | line::lines when System.String.IsNullOrWhiteSpace(line) ->
         yield! parseBlocks lines    
     | _ -> ()
@@ -213,6 +220,49 @@ h1 heading
 h2 heading
 ----------
 No heading
+
+> This is a hand-written quotation
+which consists of two paragraphs.
+
+> The second paragraph is quite short.
+
+> This is a quotation that contains F# code:
+> 
+>     printfn "Hello from quoted code!"
+>     let msg = "world"
+>     printfn "hello %s!" msg
+
+> Another *test*
+> More test
+
 """
 
 let sampleDoc = sample.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
+
+txt.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
+
+let (PrefixedLines ">" res) = ["> This is a hand-written quotation";"which consists of two paragraphs."]
+let (PrefixedLines ">" res) = ["> Another *test*";"> More test"]
+
+
+"""
+> This is a hand-written quotation
+which consists of two paragraphs.
+""".Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq  
+
+"""
+> The second paragraph is quite short.
+""".Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq  
+
+"""
+> This is a quotation that contains F# code:
+> 
+>     printfn "Hello from quoted code!"
+>     let msg = "world"
+>     printfn "hello %s!" msg
+""".Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
+
+"""
+> Another *test*
+> More test
+""".Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
