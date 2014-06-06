@@ -313,3 +313,29 @@ let output = new StringWriter(sb)
 
 sampleDoc |> List.iter (formatBlock output)
 sb.ToString()        
+
+module Matching = 
+    let (|SpanNode|_|) span =
+        match span with
+        | Strong spans | Emphasis spans | HyperLink(spans,_) ->
+            Some(box span, spans)
+        | _ -> None
+
+    let SpanNode (span:obj, children) =
+        match unbox span with
+        | Strong _ -> Strong children
+        | Emphasis _ -> Emphasis children
+        | HyperLink(_, url) -> HyperLink(children, url)
+        | _ -> invalidArg "" "Incorrect MarkdownSpan"
+
+    let (|BlockNode|_|) block =
+        match block with
+        | Heading(_,spans)
+        | Paragraph(spans) -> Some(box block, spans)
+        | _ -> None
+
+    let BlockNode (block:obj, spans) =
+        match unbox block with
+        | Heading(a, _) -> Heading(a, spans)
+        | Paragraph(_) -> Paragraph(spans)
+        | _ -> invalidArg "" "Incorrect MarkdownBlock"
