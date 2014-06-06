@@ -162,7 +162,7 @@ let (PrefixedLines "..." res) = ["...1";"2";"...3"]
 
 
 // Exercise 3 : Improve and complete parsing of headings
-let (|Heading|_|) = function
+let (|Heading'|_|) = function
     | AsCharList(StartsWith ['#'; ' '] heading)::lines -> Some(1,heading,lines) 
     | AsCharList(StartsWith ['#'; '#'; ' '] heading)::lines -> Some(2,heading,lines) 
     | heading::AsCharList(StartsWith ['-'; '-'; '-'] _)::lines -> Some(1,heading |> List.ofSeq,lines) 
@@ -171,7 +171,7 @@ let (|Heading|_|) = function
 
 let rec parseBlocks lines = seq {
     match lines with
-    | Heading(size, heading, lines) ->
+    | Heading'(size, heading, lines) ->
         yield Heading(size, parseSpans [] heading |> List.ofSeq)
         yield! parseBlocks lines
 //    | AsCharList(StartsWith ['#'; ' '] heading)::lines ->
@@ -266,3 +266,50 @@ which consists of two paragraphs.
 > Another *test*
 > More test
 """.Split('\r','\n') |> List.ofSeq |> parseBlocks |> List.ofSeq
+
+
+
+// Markdown to HTML
+open System.IO
+
+let outputElement (output:TextWriter) tag attributes body =
+    let attrString = 
+        [ for k, v in attributes -> k + "=\"" + v + "\""]
+        |> String.concat " "
+    output.Write("<" + tag + attrString + ">")
+    body()
+    output.Write("</" + tag + ">")
+
+let rec formatSpan (output:TextWriter) span = 
+    let out = outputElement output
+    let iter spans = (fun () -> spans |> List.iter (formatSpan output))
+    match span with
+    | Literal(str) ->
+        output.Write(str)
+    | Strong(spans) ->
+        out "strong" [] (spans |> iter)
+    | Emphasis(spans) ->
+        out "em" [] (spans |> iter)
+    | HyperLink(spans, url) ->
+        out "a" ["href", url] (spans |> iter)
+    | InlineCode(code) ->
+        output.Write("<code>" + code + "</code>")
+
+let rec formatBlock (output:TextWriter) block = 
+    let out = outputElement output
+    let iter spans = (fun () -> spans |> List.iter (formatSpan output))
+    match block with
+    | Heading(size, spans) ->
+        out ("h" + size.ToString()) [] (spans |> iter)    
+    | Paragraph(spans) ->
+        out "p" [] (spans |> iter)    
+    | CodeBlock(lines) ->
+        out "pre" [] (fun() -> lines |> List.iter output.WriteLine)
+    | BlockQuote(blocks) ->
+        out "quote" [] (fun() -> blocks |> List.iter (formatBlock output))
+
+let sb = System.Text.StringBuilder()
+let output = new StringWriter(sb)
+
+sampleDoc |> List.iter (formatBlock output)
+sb.ToString()        
