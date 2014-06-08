@@ -339,3 +339,52 @@ module Matching =
         | Heading(a, _) -> Heading(a, spans)
         | Paragraph(_) -> Paragraph(spans)
         | _ -> invalidArg "" "Incorrect MarkdownBlock"
+
+
+let rec generateSpanRefs (refs:ResizeArray<_>) = function
+    | HyperLink(body, url) as span -> 
+        let id = sprintf "[%d]" (refs.Count + 1)
+        refs.Add(id, url)
+        [span; Literal(id)]
+    | Matching.SpanNode(shape, children) ->        
+        let children = children |> List.collect (generateSpanRefs refs)
+        [Matching.SpanNode(shape, children)]
+    | span -> [span]
+
+let generateBlockRefs refs = function
+    | Matching.BlockNode(shape, children) -> 
+        let children = children |> List.collect (generateSpanRefs refs)
+        Matching.BlockNode(shape, children)
+    | block -> block
+
+let doc = 
+    [ """For more information, see the [F# home page](http://fsharp.net) or read [Real-World Functional Programming](http://manning.com/petricek) published by [Manning](http://manning.com)."""] 
+    |> parseBlocks |> List.ofSeq
+
+let refs = ResizeArray<_>()
+let printable = doc |> List.map (generateBlockRefs refs)
+
+// Exercise 5: Count the number of words
+open System.Text
+open System.Text.RegularExpressions
+
+let countWords str = Regex.Matches(str, @"[\S]+").Count
+
+let count = ref 0
+
+let rec countWordsInSpan count = function
+    | Literal(str) ->
+        printfn "%s" str
+        count := !count + (countWords str)
+    | Matching.SpanNode(_, children) ->
+        children |> List.iter (countWordsInSpan count)
+    | _ -> ()
+
+let countWordsInBlock count = function
+    | Matching.BlockNode(_, children) ->         
+        children |> List.iter (countWordsInSpan count)
+    | _ -> ()
+
+doc |> List.iter (countWordsInBlock count)
+count := 0
+sampleDoc |> List.iter (countWordsInBlock count)
